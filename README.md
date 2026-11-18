@@ -44,6 +44,10 @@ For local staging, put `DATABASE_CA_CERT_PATH` in the ignored `.env.staging.loca
 
 Paste that value into Vercel's environment-variable editor; do not place it in source control. The server decodes the CA in memory and configures `rejectUnauthorized: true` plus Node's hostname verification. Keep `.env.staging.local` and all database URLs/passwords out of Git.
 
+### Supabase staging database
+
+The staging helper scripts are hard-guarded to project reference `ytyqirvelfatkbtjuyzf`, the `aws-1-ap-south-1.pooler.supabase.com` shared pooler, and database `postgres`. They use session mode on port `5432` for migrations, require the verified CA, and never use the local embedded database runner. From this directory, run `npm run db:staging:migrate` only after confirming `.env.staging.local` targets the verified staging project. Migration `0000_local_auth_stub.sql` is local-only and intentionally excluded. Then run `npm run test:staging:verify` and `npm run test:staging:acceptance`. The acceptance script rolls its synthetic passenger/auth/claim fixtures back and restores the Stowaway sequence. It does not switch payments on; concurrent eligible reservation races therefore remain untested while payment reservations are disabled.
+
 ## Follower import
 
 Sign into the admin console, open **Import Instagram Followers**, choose an official followers JSON export or ZIP, review validation and proposed passenger identities, then confirm. The app supports `followers.json`, `followers_1.json` and split Instagram follower files. Uploads are capped at 20 MB. Missing timestamps and malformed identities block import. Equal timestamps are flagged; their file order is retained. Later historical followers are appended after existing identities only after explicit approval.

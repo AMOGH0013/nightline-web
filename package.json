@@ -16,7 +16,10 @@
     "test:manychat": "node scripts/manychat-http.test.mjs",
     "test:import-http": "node scripts/import-http.test.mjs",
     "test:public-lookup": "node scripts/public-lookup.test.mjs",
-    "test:staging-connection": "node --env-file=.env.staging.local scripts/staging-db-check.mjs"
+    "test:staging-connection": "node --env-file=.env.staging.local scripts/staging-db-check.mjs",
+    "db:staging:migrate": "node --env-file=.env.staging.local scripts/staging-migrate.mjs --apply",
+    "test:staging:verify": "node --env-file=.env.staging.local scripts/staging-verify.mjs",
+    "test:staging:acceptance": "node --env-file=.env.staging.local scripts/staging-acceptance.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

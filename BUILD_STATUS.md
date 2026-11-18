@@ -225,3 +225,33 @@ This follow-up supersedes the earlier connection-failure outcome above for conne
 - Documented Vercel's portable setup in `README.md`: set server-only `DATABASE_CA_CERT_BASE64` to the single-line base64 encoding of the official CA. The certificate is decoded in memory by the server-side pool; strict TLS verification remains enabled.
 - `password_decoded_once=true` using the PostgreSQL URI parser; the generated password is percent-encoded once (including its literal `@`) and the parsed credential contains no `%40` residue. `ssl_url_parameters=false`; TLS is configured only through the driver's `ssl` object.
 - `npx tsc --noEmit` — passed. `npm run lint` — passed.
+
+## NIGHTLINE-STAGING migrations and acceptance — 2026-11-18
+
+### Target and pre-migration checks
+
+- The Supabase dashboard independently showed project `NIGHTLINE-STAGING` at reference `ytyqirvelfatkbtjuyzf`. This matches the URL's shared-pooler username project suffix and expected host `aws-1-ap-south-1.pooler.supabase.com`.
+- Migration DDL used Supabase shared pooler **session mode on port 5432**, with the supplied Supabase CA, `rejectUnauthorized: true`, and Node hostname verification. The transaction pooler port 6543 was not used for DDL. Supabase documents 5432 as session mode and 6543 as transaction mode: https://supabase.com/docs/guides/database/connecting-to-postgres.
+- Read-only preflight found no public relations or custom types, no migration ledgers, no passenger-related objects, and zero `auth.users`. The only pre-existing public function was Supabase's `rls_auto_enable()` platform helper attached to its `ensure_rls` DDL event trigger.
+- Reviewed migrations in order. Applied only `0001_identity_allocation.sql` through `0006_follower_import_reports.sql`; `0000_local_auth_stub.sql` is local-only and was excluded. `0003` replaces the owner policies introduced in `0001`. No table/schema drop or truncate is present in the applied migration files. The guarded runner uses a session advisory lock and one transaction for all DDL and migration records.
+
+### Migration and schema verification
+
+- `node --env-file=.env.staging.local scripts/staging-migrate.mjs --apply` — passed. All six migrations applied and recorded with source checksums; transaction committed.
+- `npm run test:staging:verify` — passed: 6 migration records/checksums match; 41 tables including `schema_migrations`; 163 total constraints (61 primary/unique, 41 foreign keys, remainder check constraints); 73 indexes (68 unique); RLS enabled on all 41 tables; 20 policies including the owner-scoped policies; restricted registration/reservation grants; manifest has no private account/email/token columns; 16 public functions and no unsafe SECURITY DEFINER search paths.
+- Luxury inventory — passed: 400 seats total (99 premium, 100 follower-entitlement, 201 future-upgrade); 202 blocked entries (L-010 plus L-200–L-400).
+- Initial and final staging data checks both found zero auth users, passengers, and tickets. `payments_enabled=false`; Conductor and Driver remain disabled/unassigned.
+
+### Isolated acceptance checks
+
+- `npm run test:staging:acceptance` — passed inside a single rollback transaction: 520 synthetic users received 500 unique founding numbers 1–500 and 20 Stowaway numbers 1–20, with 520 unique ticket serials and verification codes.
+- Duplicate registration returned the original ticket with no second passenger. Duplicate Manychat provider-contact and duplicate-passenger identity claims were rejected by their unique constraints.
+- Two concurrent Luxury reservation attempts both failed closed with `payments_disabled`; the seat stayed available and the switch stayed false. A concurrent *eligible* reservation race was not run because it would require enabling the payment reservation switch. No payment provider or transaction was called.
+- All synthetic auth/passenger/ticket/claim records were rolled back, the Stowaway sequence was restored to its pre-test state, and final checks showed zero rows in those tables.
+
+### Boundaries
+
+- No local PostgreSQL database or `.env.local` was used or changed. All database sessions were guarded to the verified staging host/reference; no production database was contacted.
+- No Vercel deployment was performed. `.env.staging.local` remains git-ignored and credentials were not logged.
+- The existing `scripts/db.mjs` is local-only and was not used. Reproducible staging commands are documented in `README.md` and implemented by `scripts/staging-migrate.mjs`, `scripts/staging-verify.mjs`, and `scripts/staging-acceptance.mjs`.
+- `npx tsc --noEmit` — passed. `npm run lint` — passed with no warnings after removing an unused verifier query.
