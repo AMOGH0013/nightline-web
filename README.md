@@ -32,6 +32,18 @@ The database-backed tests require local PostgreSQL. The admin password is read f
 
 Migrations `0001` through `0006` extend the application schema. `0000_local_auth_stub.sql` is strictly for the local embedded PostgreSQL environment and must not be applied to Supabase. For a cloud database, use Supabase's existing `auth` schema and roles, then apply `0001`–`0006` in order.
 
+### Supabase PostgreSQL TLS
+
+The server-side `pg` pool supports the official Supabase database CA without disabling certificate or hostname verification. Keep SSL options out of `DATABASE_URL`; the application rejects URL SSL parameters to avoid conflicting settings. URI-reserved characters in the database username or password must be percent-encoded exactly once in `DATABASE_URL` (for example, `@` becomes `%40`).
+
+For local staging, put `DATABASE_CA_CERT_PATH` in the ignored `.env.staging.local` and point it to the downloaded CA PEM file. For Vercel, the local Windows file path is not available to serverless functions. Add a server-only environment variable named `DATABASE_CA_CERT_BASE64` to the appropriate Vercel environment and set its value to a single-line base64 encoding of the official Supabase CA certificate. Do not add it as a `NEXT_PUBLIC_` variable. On Windows, generate the value in the local PowerShell session with:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\path\to\prod-ca-2021.crt")) | Set-Clipboard
+```
+
+Paste that value into Vercel's environment-variable editor; do not place it in source control. The server decodes the CA in memory and configures `rejectUnauthorized: true` plus Node's hostname verification. Keep `.env.staging.local` and all database URLs/passwords out of Git.
+
 ## Follower import
 
 Sign into the admin console, open **Import Instagram Followers**, choose an official followers JSON export or ZIP, review validation and proposed passenger identities, then confirm. The app supports `followers.json`, `followers_1.json` and split Instagram follower files. Uploads are capped at 20 MB. Missing timestamps and malformed identities block import. Equal timestamps are flagged; their file order is retained. Later historical followers are appended after existing identities only after explicit approval.

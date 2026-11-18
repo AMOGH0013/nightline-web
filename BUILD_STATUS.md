@@ -210,3 +210,18 @@ The database runner creates only a previously nonexistent database and stops if 
 - Download that project's database root CA certificate from Supabase Database Settings and provide a local certificate path/configuration so Node can validate the server certificate. Do not disable certificate verification.
 - Correct the `DATABASE_URL` URI syntax locally (percent-encode any reserved username/password characters) without pasting it into chat or a report. Keep it in the ignored `.env.staging.local` file.
 - After both identity and TLS are verified, connect read-only first and inspect public schema objects, migration ledger, and data. Only if the target is confirmed staging and safe/empty, apply `0001`–`0006` transactionally and verify grants/RLS/schema. Do not use `npm run db` for this cloud operation.
+
+## Staging TLS follow-up — 2026-11-18
+
+This follow-up supersedes the earlier connection-failure outcome above for connectivity and TLS only. It does not change the prior decision not to inspect schema or apply migrations.
+
+- Configured the existing PostgreSQL pool to load the official CA from `DATABASE_CA_CERT_PATH`, `DATABASE_CA_CERT_BASE64`, or `DATABASE_CA_CERT`, require `rejectUnauthorized: true`, and retain Node hostname verification. SSL parameters in `DATABASE_URL` are rejected to avoid conflicting configuration.
+- The staging `DATABASE_URL` contained a literal `@` in the generated password, invalidating the standard URI syntax. Reserved characters were percent-encoded in the ignored `.env.staging.local`; the value was not printed or committed.
+- Verified the supplied `C:\Users\amogh\Desktop\prod-ca-2021.crt` is a CA certificate for `Supabase Root 2021 CA`, valid through 2031-04-26.
+- `node --env-file=.env.staging.local scripts/staging-db-check.mjs` — passed against `aws-1-ap-south-1.pooler.supabase.com:6543`, database `postgres`. TLS certificate validation passed and hostname verification remained enabled.
+- The check ran only `select current_database()`. No migrations or writes were run. No local database was modified. The first sandboxed attempt failed DNS resolution (`ENOTFOUND`) before TLS; the network-authorized retry succeeded.
+- The password and CA contents were not emitted to terminal output or reports. `.env.staging.local` remains git-ignored. No production connection or deployment was used.
+- Repeated the read-only connection through the portable `DATABASE_CA_CERT_BASE64` configuration — passed with the same pooler hostname, verified CA chain, and hostname verification enabled. This confirms Vercel does not need the local Windows certificate path.
+- Documented Vercel's portable setup in `README.md`: set server-only `DATABASE_CA_CERT_BASE64` to the single-line base64 encoding of the official CA. The certificate is decoded in memory by the server-side pool; strict TLS verification remains enabled.
+- `password_decoded_once=true` using the PostgreSQL URI parser; the generated password is percent-encoded once (including its literal `@`) and the parsed credential contains no `%40` residue. `ssl_url_parameters=false`; TLS is configured only through the driver's `ssl` object.
+- `npx tsc --noEmit` — passed. `npm run lint` — passed.

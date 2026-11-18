@@ -1,4 +1,6 @@
 import "server-only";
+import fs from "node:fs";
+import { checkServerIdentity } from "node:tls";
 import { Pool, type QueryResultRow } from "pg";
 
 let pool: Pool | undefined;
@@ -13,7 +15,42 @@ export function databaseUrl() {
 
 function getPool() {
   if (!pool) {
-    pool = new Pool({ connectionString: databaseUrl(), max: 8 });
+    const connectionString = databaseUrl();
+    const caPath = process.env.DATABASE_CA_CERT_PATH?.trim();
+    const caBase64 = process.env.DATABASE_CA_CERT_BASE64?.trim();
+    const caPem = process.env.DATABASE_CA_CERT?.trim();
+    const configuredCaSources = [caPath, caBase64, caPem].filter(Boolean).length;
+    const hasSslUrlOptions = /[?&](?:ssl|sslmode|sslrootcert|sslcert|sslkey)=/i.test(connectionString);
+
+    if (configuredCaSources > 1) {
+      throw new Error("Configure only one of DATABASE_CA_CERT_PATH, DATABASE_CA_CERT_BASE64, or DATABASE_CA_CERT.");
+    }
+
+    if (hasSslUrlOptions) {
+      throw new Error("Remove SSL parameters from DATABASE_URL; TLS options are configured by the server-side database client.");
+    }
+
+    const ca = caBase64
+      ? Buffer.from(caBase64.replace(/\s/g, ""), "base64")
+      : caPem
+        ? Buffer.from(caPem.replace(/\\n/g, "\n"), "utf8")
+        : caPath
+          ? fs.readFileSync(caPath)
+          : undefined;
+
+    if (ca && !ca.toString("utf8").includes("-----BEGIN CERTIFICATE-----")) {
+      throw new Error("The configured database CA certificate is not valid PEM data.");
+    }
+
+    const ssl = ca
+      ? {
+          ca,
+          rejectUnauthorized: true,
+          checkServerIdentity,
+        }
+      : undefined;
+
+    pool = new Pool({ connectionString, ...(ssl ? { ssl } : {}), max: 8 });
   }
   return pool;
 }
