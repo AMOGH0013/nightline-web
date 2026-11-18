@@ -13,6 +13,7 @@ const migrations = [
   "0004_manychat_claims.sql",
   "0005_manual_follower_order.sql",
   "0006_follower_import_reports.sql",
+  "0007_lock_down_default_grants.sql",
 ];
 const expectedHost = "aws-1-ap-south-1.pooler.supabase.com";
 const expectedProject = "ytyqirvelfatkbtjuyzf";
@@ -59,6 +60,7 @@ const client = new pg.Client({
 
 let locked = false;
 let committed = false;
+let freshDatabase = false;
 let activeMigration = "preflight";
 try {
   await client.connect();
@@ -73,14 +75,23 @@ try {
 
   await client.query("begin");
   await client.query("set local lock_timeout = '5s'");
-  await assertEmptyApplicationSchema(client);
-  await client.query(`create table public.schema_migrations (
-    name text primary key,
-    checksum text not null check (checksum ~ '^[0-9a-f]{64}$'),
-    applied_at timestamptz not null default pg_catalog.now()
-  )`);
+  const ledgerExists = (await client.query("select pg_catalog.to_regclass('public.schema_migrations') as ledger")).rows[0].ledger;
+  let existing = [];
+  if (ledgerExists) {
+    existing = (await client.query("select name,checksum from public.schema_migrations order by name")).rows;
+    await assertMigrationPrefix(existing);
+    console.log(`preflight=verified_migration_prefix count=${existing.length}`);
+  } else {
+    await assertEmptyApplicationSchema(client);
+    await client.query(`create table public.schema_migrations (
+      name text primary key,
+      checksum text not null check (checksum ~ '^[0-9a-f]{64}$'),
+      applied_at timestamptz not null default pg_catalog.now()
+    )`);
+    freshDatabase = true;
+  }
 
-  for (const name of migrations) {
+  for (const name of migrations.slice(existing.length)) {
     activeMigration = name;
     const sql = fs.readFileSync(path.join(root, "supabase", "migrations", name), "utf8");
     await client.query(sql);
@@ -93,14 +104,14 @@ try {
 
   activeMigration = "verification-before-commit";
   await verifyLedger(client);
-  await verifyInitialData(client);
+  await verifyPostMigrationState(client, freshDatabase);
   await client.query("commit");
   committed = true;
   console.log("migration_transaction=committed");
 
   activeMigration = "post-commit-verification";
   await verifyLedger(client);
-  await verifyInitialData(client);
+  await verifyPostMigrationState(client, freshDatabase);
   console.log("migration_verification=passed");
 } catch (error) {
   if (!committed) await client.query("rollback").catch(() => {});
@@ -168,17 +179,43 @@ async function verifyLedger(db) {
   }
 }
 
+async function assertMigrationPrefix(rows) {
+  if (rows.length > migrations.length) throw new Error("Migration ledger contains unrecognized records.");
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].name !== migrations[i]) throw new Error("Migration ledger is not a valid ordered prefix.");
+    const sql = fs.readFileSync(path.join(root, "supabase", "migrations", migrations[i]), "utf8");
+    if (rows[i].checksum !== createHash("sha256").update(sql).digest("hex")) {
+      throw new Error(`Migration checksum changed for ${migrations[i]}; refusing to continue.`);
+    }
+  }
+}
+
+async function verifyPostMigrationState(db, isFresh) {
+  if (isFresh) return verifyInitialData(db);
+  return verifyConfiguration(db);
+}
+
 async function verifyInitialData(db) {
   const data = (await db.query(`
     select
       (select count(*)::int from public.passengers) passengers,
       (select count(*)::int from public.tickets) tickets,
+      (select count(*)::int from auth.users) auth_users,
       (select count(*)::int from public.seat_inventory) founding_seats,
       (select count(*)::int from public.luxury_seat_inventory) luxury_seats,
       (select value from public.site_settings where key='payments_enabled') payments_enabled
   `)).rows[0];
-  if (data.passengers || data.tickets || data.founding_seats !== 500 || data.luxury_seats !== 400 || data.payments_enabled !== false) {
+  if (data.passengers || data.tickets || data.auth_users || data.founding_seats !== 500 || data.luxury_seats !== 400 || data.payments_enabled !== false) {
     throw new Error("Post-migration baseline verification failed.");
   }
-  console.log(`baseline=pass passengers=${data.passengers} tickets=${data.tickets} founding_seats=${data.founding_seats} luxury_seats=${data.luxury_seats} payments_enabled=${data.payments_enabled}`);
+  console.log(`baseline=pass passengers=${data.passengers} tickets=${data.tickets} auth_users=${data.auth_users} founding_seats=${data.founding_seats} luxury_seats=${data.luxury_seats} payments_enabled=${data.payments_enabled}`);
+}
+
+async function verifyConfiguration(db) {
+  const state = (await db.query("select (select count(*)::int from public.seat_inventory) founders,(select count(*)::int from public.luxury_seat_inventory) luxury,(select value from public.site_settings where key='payments_enabled') payments_enabled"))
+    .rows[0];
+  if (state.founders !== 500 || state.luxury !== 400 || state.payments_enabled !== false) {
+    throw new Error("Post-migration configuration verification failed.");
+  }
+  console.log(`configuration=pass founding_seats=${state.founders} luxury_seats=${state.luxury} payments_enabled=false`);
 }

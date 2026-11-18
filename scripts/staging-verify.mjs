@@ -14,6 +14,7 @@ const migrationNames = [
   "0004_manychat_claims.sql",
   "0005_manual_follower_order.sql",
   "0006_follower_import_reports.sql",
+  "0007_lock_down_default_grants.sql",
 ];
 const parsed = parse(process.env.DATABASE_URL);
 assert.equal(parsed.host, "aws-1-ap-south-1.pooler.supabase.com");
@@ -126,12 +127,65 @@ try {
   assert.equal(privileges.anon_reserve, false);
   assert.equal(privileges.auth_reserve, false);
   assert.equal(privileges.service_reserve, true);
+  assert.equal((await client.query("select has_table_privilege('anon','public.schema_migrations','truncate') as ok"))
+    .rows[0].ok, false);
+  assert.equal((await client.query("select has_table_privilege('authenticated','public.username_lookup_rate_limits','select') as ok"))
+    .rows[0].ok, false);
+  assert.equal((await client.query("select has_table_privilege('anon','public.username_lookup_rate_limits','truncate') as ok"))
+    .rows[0].ok, false);
+  assert.equal((await client.query("select has_table_privilege('authenticated','public.manifest','truncate') as ok"))
+    .rows[0].ok, false);
+  const dangerousTableGrants = (await client.query(`
+    select grantee,table_name,privilege_type
+    from information_schema.role_table_grants
+    where table_schema='public' and grantee in ('PUBLIC','anon','authenticated')
+      and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER')
+    order by grantee,table_name,privilege_type
+  `)).rows;
+  assert.deepEqual(dangerousTableGrants, []);
+  const nonSelectColumnGrants = (await client.query(`
+    select grantee,table_name,column_name,privilege_type
+    from information_schema.column_privileges
+    where table_schema='public' and grantee in ('PUBLIC','anon','authenticated') and privilege_type<>'SELECT'
+    order by grantee,table_name,column_name,privilege_type
+  `)).rows.map((row) => `${row.grantee}.${row.table_name}.${row.column_name}.${row.privilege_type}`);
+  assert.deepEqual(nonSelectColumnGrants, [
+    "authenticated.profiles.bio.UPDATE",
+    "authenticated.profiles.display_name.UPDATE",
+    "authenticated.profiles.handle_public.UPDATE",
+    "authenticated.profiles.instagram_handle.UPDATE",
+    "authenticated.profiles.is_listed.UPDATE",
+  ]);
+  const ordinarySequenceGrants = (await client.query(`
+    select c.relname
+    from pg_class c
+    join pg_namespace n on n.oid=c.relnamespace
+    cross join lateral pg_catalog.aclexplode(coalesce(c.relacl,pg_catalog.acldefault('S'::"char",c.relowner))) a
+    left join pg_roles r on r.oid=a.grantee
+    where n.nspname='public' and c.relkind='S' and (a.grantee=0 or r.rolname in ('anon','authenticated'))
+  `)).rows;
+  assert.deepEqual(ordinarySequenceGrants, []);
+  const publicExecutables = (await client.query("select routine_name from information_schema.routine_privileges where specific_schema='public' and grantee='PUBLIC' order by routine_name"))
+    .rows.map((row) => row.routine_name);
+  assert.deepEqual(publicExecutables, ["rls_auto_enable"]);
+  const publicRoutinePrivileges = (await client.query(`
+    select grantee,routine_name
+    from information_schema.routine_privileges
+    where specific_schema='public' and grantee in ('anon','authenticated')
+    order by grantee,routine_name
+  `)).rows.map((row) => `${row.grantee}.${row.routine_name}`);
+  for (const expected of ["anon.poll_results", "anon.public_stats", "anon.verify_passenger_ticket", "anon.verify_ticket", "authenticated.cast_vote", "authenticated.poll_results", "authenticated.public_stats", "authenticated.verify_passenger_ticket", "authenticated.verify_ticket"]) {
+    assert.ok(publicRoutinePrivileges.includes(expected), `missing intended function grant ${expected}`);
+  }
+  for (const forbidden of ["anon.guard_passenger_identity", "authenticated.guard_passenger_identity", "anon.journey_day_for", "authenticated.journey_day_for"]) {
+    assert.ok(!publicRoutinePrivileges.includes(forbidden), `unexpected function grant ${forbidden}`);
+  }
   const manifestColumns = (await client.query("select column_name from information_schema.columns where table_schema='public' and table_name='manifest'"))
     .rows.map((row) => row.column_name);
   for (const privateColumn of ["email", "user_id", "account_user_id", "verification_code", "token_hash"]) {
     assert.ok(!manifestColumns.includes(privateColumn), `private column leaked by manifest: ${privateColumn}`);
   }
-  console.log("permissions=pass manifest_private_columns=absent protected_functions=restricted");
+  console.log("permissions=pass only_profile_column_updates ordinary_sequence_grants=0 manifest_private_columns=absent protected_functions=restricted");
 
   const functions = (await client.query("select p.proname,p.prosecdef,coalesce(array_to_string(p.proconfig,','),'') config from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public'"))
     .rows;

@@ -255,3 +255,12 @@ This follow-up supersedes the earlier connection-failure outcome above for conne
 - No Vercel deployment was performed. `.env.staging.local` remains git-ignored and credentials were not logged.
 - The existing `scripts/db.mjs` is local-only and was not used. Reproducible staging commands are documented in `README.md` and implemented by `scripts/staging-migrate.mjs`, `scripts/staging-verify.mjs`, and `scripts/staging-acceptance.mjs`.
 - `npx tsc --noEmit` — passed. `npm run lint` — passed with no warnings after removing an unused verifier query.
+
+### Security follow-up — migration 0007
+
+- A full ACL audit after migrations `0001`–`0006` found Supabase default `TRUNCATE`/`REFERENCES`/`TRIGGER` grants remaining for `anon`/`authenticated` on the public migration ledger, the rate-limit table, and the manifest view; it also found default `PUBLIC EXECUTE` on `guard_passenger_identity()` and `journey_day_for(timestamptz)`. This was reported before final acceptance.
+- Added and applied `0007_lock_down_default_grants.sql` in one strict-TLS session-mode transaction. It revokes those ordinary-role privileges, enables RLS on `username_lookup_rate_limits`, limits `manifest` to SELECT, and restricts the two internal functions to `service_role`.
+- Migration 0007 checksum: `f96680b31710b70f2152c164fb6c610bc90d7f13e1915c285ad7224869c19402`.
+- Post-fix `npm run test:staging:verify` — passed: all 7 migrations and checksums recorded; 41 tables, 61 primary/unique constraints, 41 foreign keys, 73 indexes (68 unique), 41 RLS-enabled tables, 20 policies, 16 public functions, and zero unsafe SECURITY DEFINER search paths. Ordinary roles have no table-level insert/update/delete/truncate/references/trigger grants, no sequence grants, and only the five intended profile-column updates. `PUBLIC EXECUTE` remains only on Supabase's `rls_auto_enable()` platform hook.
+- Post-fix `npm run test:staging:acceptance` — passed: the 520-user numbering, duplicate registration, duplicate claim, rollback/sequence restoration, and two simultaneous fail-closed reservation checks all passed. Payments remained disabled; the eligible reservation race remains untested.
+- Final staging state remains empty of auth users, passengers, tickets, reservation fixtures, and claim fixtures. Inventory is 500 founding seats and 400 Luxury seats; payments remain disabled and Conductor/Driver remain disabled.
