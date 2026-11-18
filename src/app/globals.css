@@ -1,26 +1,175 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --font-display: "Arial Narrow", Impact, sans-serif;
+  --font-body: Georgia, "Times New Roman", serif;
+  --font-mono: "Courier New", monospace;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+  --color-ink: #e7e1d4;
+  --color-muted: #a39e93;
+  --color-olive: #8b9078;
+  --color-amber: #c6a36a;
+  --color-line: #3c4138;
+  --color-panel: #1b1e19;
+  --color-soot: #121411;
+  --color-danger: #c47a68;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: #121411;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+  color: #e7e1d4;
+  background:
+    radial-gradient(1200px 500px at 10% -10%, rgba(198, 163, 106, 0.08), transparent 55%),
+    radial-gradient(900px 600px at 100% 0%, rgba(90, 104, 92, 0.16), transparent 50%),
+    #121411;
+  font-family: var(--font-body), Georgia, serif;
+}
+
+body::before {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  opacity: 0.18;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+  z-index: 0;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: #c6a36a;
+  color: #16140f;
+}
+
+.display {
+  font-family: var(--font-display), "Arial Narrow", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+.panel {
+  background: rgba(27, 30, 25, 0.88);
+  border: 1px solid #3c4138;
+  box-shadow: inset 0 1px 0 rgba(231, 225, 212, 0.04);
+}
+
+.field {
+  width: 100%;
+  border: 1px solid #3c4138;
+  background: #10120f;
+  color: #e7e1d4;
+  padding: 0.75rem 0.85rem;
+  outline: none;
+}
+
+.field:focus {
+  border-color: #c6a36a;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.65rem 1.1rem;
+  border: 1px solid #c6a36a;
+  background: #c6a36a;
+  color: #1a160f;
+  font-family: var(--font-display), sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.82rem;
+}
+
+.btn:hover {
+  background: #d8bc86;
+}
+
+.btn.secondary {
+  background: transparent;
+  color: #e7e1d4;
+  border-color: #3c4138;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.kicker {
+  color: #c6a36a;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.ticket-metal {
+  --ticket-accent: #c6a36a;
+  position: relative;
+  isolation: isolate;
+  border-color: color-mix(in srgb, var(--ticket-accent) 46%, #3c4138);
+  background:
+    linear-gradient(132deg, rgba(255,255,255,.035), transparent 19%, transparent 71%, rgba(255,255,255,.025)),
+    linear-gradient(145deg, #222522, #111311 48%, #1d201d);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.13), inset 0 -1px 0 rgba(0,0,0,.8), 0 18px 48px rgba(0,0,0,.38);
+}
+
+.ticket-metal::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 8px;
+  border: 1px solid color-mix(in srgb, var(--ticket-accent) 30%, transparent);
+  box-shadow: inset 0 0 24px rgba(0,0,0,.22);
+}
+
+.ticket-metal[data-ticket-class="silver"] { --ticket-accent: #c3c8ca; }
+.ticket-metal[data-ticket-class="bronze"] { --ticket-accent: #b87d54; }
+.ticket-metal[data-ticket-class="regular"], .ticket-metal[data-ticket-class="standard"] { --ticket-accent: #9ba19d; }
+.ticket-name { color: #e4c77f; text-shadow: 0 1px 1px #000, 0 0 20px rgba(228,199,127,.18); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .ticket-metal::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: -40% auto -40% -45%;
+    width: 28%;
+    transform: rotate(16deg);
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.055), transparent);
+    animation: metal-sweep 8s ease-in-out 1s infinite;
+  }
+  @keyframes metal-sweep { 0%, 72% { left: -45%; } 100% { left: 125%; } }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+.rise {
+  animation: rise 700ms ease both;
 }

@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+**/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -15,6 +16,9 @@
 
 # next.js
 /.next/
+/.next-nightline-qa/
+**/.next/
+**/.next-*/
 /out/
 
 # production
@@ -23,6 +27,15 @@
 # misc
 .DS_Store
 *.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.credentials
+credentials.*
+secrets.*
+.secrets/
 
 # debug
 npm-debug.log*
@@ -30,8 +43,31 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# environment and credential files (never commit)
 .env*
+**/.env*
+.env
+.env.local
+.env.staging.local
+
+# local postgres data
+/.pgdata/
+/.pgdata-final-qa/
+**/pgdata/
+**/pgdata-*/
+*.dump
+*.pgdump
+*.backup
+*.bak
+*.sql.gz
+*.sql.bz2
+*.sql.xz
+*.zip
+
+# local browser evidence and private/synthetic QA artifacts
+/qa-artifacts/
+/test-results/
+/playwright-report/
 
 # vercel
 .vercel

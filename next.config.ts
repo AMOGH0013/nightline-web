@@ -1,17 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
-  turbopack: {
-    rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
-      },
-    },
-  },
+  distDir: process.env.NIGHTLINE_DIST_DIR?.trim() || ".next",
+  serverExternalPackages: ["pg", "embedded-postgres", "qrcode"],
 };
 
 export default nextConfig;
